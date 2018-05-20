@@ -6,7 +6,124 @@
  *
  */
 
+
+const MYQ_DOOR_ACTION_CLOSE = 0;
+
+const MYQ_DOOR_ACTION_OPEN = 1;
+
+const MYQ_DOOR_STATE_UKNOWN = -1;
+
+const MYQ_DOOR_STATE_OPEN = 1;
+
+const MYQ_DOOR_STATE_CLOSED = 2;
+
+const MYQ_DOOR_STATE_OPENING = 4;
+
+const MYQ_DOOR_STATE_CLOSING = 5;
+
+
 class MyQException extends Exception {}
+
+class MyQState {
+
+    protected $_state = MYQ_DOOR_STATE_UKNOWN;
+
+    protected $_stateTime = 0;
+
+    protected $_stateDescriptions = array (
+        MYQ_DOOR_STATE_UNKNOWN => 'unknown',
+        MYQ_DOOR_STATE_OPEN => 'open',
+        MYQ_DOOR_STATE_CLOSED => 'closed',
+        MYQ_DOOR_STATE_OPENING => 'opening',
+        MYQ_DOOR_STATE_CLOSING => 'closing',
+    );
+
+    public function __construct ($state=false, $timestamp=false) {
+        if ($state) {
+            $this->_state = $state;
+        }
+        $this->_stateTime = time();
+        if ($timestamp) {
+            $this->_stateTime = (int)$timestamp / 1000;            
+        }
+        return $this;
+    }
+
+    public function __get ($attr) {
+        switch ($attr) {
+            case 'desc':
+                return $this->_stateDescriptions[$this->_state];
+            case 'time':
+            case 'updated':
+            case 'date':
+                return $this->_stateTime;
+            case 'delta':
+                return $this->_getTimeDelta('str');
+            case 'seconds':
+                return $this->_getTimeDelta();
+        }
+        $trace = debug_backtrace();
+        trigger_error(
+            'Undefined property via __get(): ' . $name .
+            ' in ' . $trace[0]['file'] .
+            ' on line ' . $trace[0]['line'],
+            E_USER_NOTICE);
+        return null;
+    }
+
+    public function __toString () {
+        return $this->_stateDescriptions[$this->_state];
+    }
+
+    private function _getTimeDelta($opt=null) {
+        $currentTz = date_default_timezone_get();
+        date_default_timezone_set('UTC');
+        $delta = time() - $this->_stateTime;
+
+        if ($opt != 'str') {
+            return $delta;
+        }
+
+        // Convert delta in human-readable format
+        // via https://stackoverflow.com/a/43956977/98030
+        $secondsInAMinute = 60;
+        $secondsInAnHour = 60 * $secondsInAMinute;
+        $secondsInADay = 24 * $secondsInAnHour;
+
+        // Extract days
+        $days = floor($delta / $secondsInADay);
+
+        // Extract hours
+        $hourSeconds = $delta % $secondsInADay;
+        $hours = floor($hourSeconds / $secondsInAnHour);
+
+        // Extract minutes
+        $minuteSeconds = $hourSeconds % $secondsInAnHour;
+        $minutes = floor($minuteSeconds / $secondsInAMinute);
+
+        // Extract the remaining seconds
+        $remainingSeconds = $minuteSeconds % $secondsInAMinute;
+        $seconds = ceil($remainingSeconds);
+
+        // Format and return
+        $timeParts = [];
+        $sections = [
+            'day' => (int)$days,
+            'hour' => (int)$hours,
+            'minute' => (int)$minutes,
+            'second' => (int)$seconds,
+        ];
+
+        foreach ($sections as $name => $value){
+            if ($value > 0){
+                $timeParts[] = $value. ' '.$name.($value == 1 ? '' : 's');
+            }
+        }
+
+        return sizeof($timeParts) ? implode(', ', $timeParts) : '0 seconds';
+    }
+
+}
 
 class MyQ {
     
@@ -17,8 +134,7 @@ class MyQ {
     protected $password = null;
 
     /** @var string|null $appId is the application ID used to register with the MyQ API */
-    protected $appId = 'NWknvuBd7LoFHfXmKNMBcgajXtZEgKUh4V7WNzMidrpUUluDpVYVZx+xT4PCM5Kx';
-    //protected $appId = 'Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB%2fi';
+    protected $appId = 'Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB/i';
 
     /** @var string|null $securityToken is the auth token returned after a successful login */
     protected $securityToken = null;
@@ -41,11 +157,15 @@ class MyQ {
 
     protected $_doorName = null;
 
-    protected $_loginUrl = 'https://myqexternal.myqdevice.com/api/v4/User/Validate';
+    protected $_doorState = null;
 
-    protected $_getDeviceDetailUrl = 'https://myqexternal.myqdevice.com/api/v4/userdevicedetails/get?&filterOn=true';
+    protected $_baseUrl = 'https://myqexternal.myqdevice.com/api/v4';
 
-    protected $_putDeviceStateUrl = '/api/v4/DeviceAttribute/PutDeviceAttribute';
+    protected $_loginUri = '/User/Validate';
+
+    protected $_getDeviceDetailUri = '/UserDeviceDetails/Get';
+
+    protected $_putDeviceStateUri = '/DeviceAttribute/PutDeviceAttribute';
 
     /** @var resource|null $_conn is the web connection to the MyQ API */
     protected $_conn = null;
@@ -79,6 +199,42 @@ class MyQ {
         return $this;
     }
 
+    public function __get ($attr) {
+        if ($attr == 'state') {
+            return $this->_doorState;
+        }
+        if (isset($this->$attr)) {
+            return $this->$attr;
+        }
+        $trace = debug_backtrace();
+        trigger_error(
+            'Undefined property via __get(): ' . $name .
+            ' in ' . $trace[0]['file'] .
+            ' on line ' . $trace[0]['line'],
+            E_USER_NOTICE);
+        return null;
+    }
+
+    public function __set ($attr, $value) {
+
+        switch ($attr) {
+            case 'open':
+                return ($value) ? $this->open() : $this->close();
+                break;
+            case 'close':
+                return ($value) ? $this->close() : $this->open();
+                break;
+        }
+
+        $trace = debug_backtrace();
+        trigger_error(
+            'Undefined property via __set(): ' . $name .
+            ' in ' . $trace[0]['file'] .
+            ' on line ' . $trace[0]['line'],
+            E_USER_NOTICE);
+        return null;
+    }
+
     /**
      * Perform a login request
      *
@@ -108,18 +264,53 @@ class MyQ {
             throw new MyQException('Missing required auth credential: ' . implode(',', $error));
         }
 
-        $this->_login();
+        return $this->_login();
     }
 
-    public function getState () {
+    public function refresh () {
         $this->_getDetails();
-        $timeInState = time() - $this->_doorStateTime;
-        echo implode(',', array (
-            $this->_locationName,
-            $this->_doorName,
-            $this->_doorState,
-            (int)$timeInState,
-        ));
+        return $this;
+    }
+
+    public function open () {
+        return $this->_requestState(MYQ_DOOR_ACTION_OPEN);
+    }
+
+    public function close () {
+        return $this->_requestState(MYQ_DOOR_ACTION_CLOSE);
+    }
+
+    private function _requestState ($action) {
+        // Fetch current device information
+        $this->_getDetails();
+
+        curl_setopt($this->_conn, CURLOPT_CUSTOMREQUEST, 'PUT');
+        curl_setopt($this->_conn, CURLOPT_URL, $this->_baseUrl . $this->_putDeviceStateUri);
+        $payload = array (
+            'AttributeName' => 'desireddoorstate',
+            'AttributeValue' => $action,
+            'MyQDeviceId' => $this->_deviceId,
+        );
+        curl_setopt($this->_conn, CURLOPT_POSTFIELDS, json_encode($payload));
+        $output = curl_exec($this->_conn);
+        $err = curl_error($this->_conn);
+
+        if ($err) {
+           throw new MyQException("cURL Error #:" . $err);
+        }
+
+        $data = json_decode($output);
+        if ($data == false) {
+            throw new MyQException("Error updating device state: $output");
+        }
+
+        if (strlen($data->ErrorMessage) > 0 || $data->ReturnCode != 0) {
+            throw new MyQException("Error returned from API: " . var_export($data));
+        }
+
+        // Update was successful, fetch the new status and report
+        return $this->refresh();
+
     }
 
     private function _init () {
@@ -153,7 +344,7 @@ class MyQ {
         $this->_init();
 
         curl_setopt($this->_conn, CURLOPT_CUSTOMREQUEST, 'POST');
-        curl_setopt($this->_conn, CURLOPT_URL, $this->_loginUrl);
+        curl_setopt($this->_conn, CURLOPT_URL, $this->_baseUrl . $this->_loginUri);
 
         $post = json_encode(array('username' => $this->username, 'password' => $this->password));
         curl_setopt($this->_conn, CURLOPT_POSTFIELDS, $post);
@@ -166,11 +357,22 @@ class MyQ {
         return $this;
     }
 
-    private function _getDetails () {
+    private function _getDetails ($getState = false, $forceUpdate = false) {
         $this->_init();
 
+        // always fetch state info from API. Location data is not expected to have changed
+        $cachedLocation = true;
+        if ($getState === false && $forceUpdate !== true) {
+            // get the location information
+            // check to see if we have this information cached already
+            if ( $forceUpdate === false && ! (is_null($this->_doorName) || is_null($this->_locationName) ) ) {
+                return;
+            }
+            $cachedLocation = false;
+        }
+
         curl_setopt($this->_conn, CURLOPT_CUSTOMREQUEST, 'GET');
-        curl_setopt($this->_conn, CURLOPT_URL, $this->_getDeviceDetailUrl);
+        curl_setopt($this->_conn, CURLOPT_URL, $this->_baseUrl . $this->_getDeviceDetailUri);
 
         $output = curl_exec($this->_conn);
         $data = json_decode($output);
@@ -179,31 +381,35 @@ class MyQ {
         }
 
         // Find our door device ID
+        // (we only look at the first listed device - later we can look for a device by name)
         foreach ($data->Devices as $device) {
-            if (stripos($device->MyQDeviceTypeName, "Gateway") !== false) {
+            if ( $cachedLocation === false && stripos($device->MyQDeviceTypeName, "Gateway") !== false ) {
                 // Find location name
                 foreach ($device->Attributes as $attr) {
                     if ($attr->AttributeDisplayName == 'desc') {
                         $this->_locationName = $attr->Value;
                     }
                 }
+                continue; // we don't want device info on the location
             }
             
+            // we should be looking at just our WGDO unit
             $this->_deviceId = $device->MyQDeviceId;
+            
             foreach ($device->Attributes as $attr) {
                 switch ($attr->AttributeDisplayName) {
                     case 'desc':
                         $this->_doorName = $attr->Value;
                         break;
                     case 'doorstate':
-                        $this->_doorState = $attr->Value;
-                        // UpdatedTime is a timestamp in ms, so we truncate
-                        $this->_doorStateTime = (int)$attr->UpdatedTime / 1000;
+                        $this->_doorState = new MyQState($attr->Value, $attr->UpdatedTime);
                         break;
                     default:
                         continue;
                 }
             }
+
+            break; // skip any other devices
         }
 
     }
