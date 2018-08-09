@@ -11,7 +11,7 @@ const MYQ_DOOR_ACTION_CLOSE = 0;
 
 const MYQ_DOOR_ACTION_OPEN = 1;
 
-const MYQ_DOOR_STATE_UKNOWN = -1;
+const MYQ_DOOR_STATE_UNKNOWN = -1;
 
 const MYQ_DOOR_STATE_OPEN = 1;
 
@@ -26,7 +26,7 @@ class MyQException extends Exception {}
 
 class MyQState {
 
-    protected $_state = MYQ_DOOR_STATE_UKNOWN;
+    protected $_state = MYQ_DOOR_STATE_UNKNOWN;
 
     protected $_stateTime = 0;
 
