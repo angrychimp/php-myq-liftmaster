@@ -5,21 +5,22 @@
  * Offers authentication to MyQ API, and access to garage door open/close/status functions
  *
  */
+const MYQ_DOOR_ACTION_CLOSE  = 0;
+const MYQ_DOOR_ACTION_OPEN   = 1;
 
-
-const MYQ_DOOR_ACTION_CLOSE = 0;
-
-const MYQ_DOOR_ACTION_OPEN = 1;
-
-const MYQ_DOOR_STATE_UNKNOWN = -1;
-
-const MYQ_DOOR_STATE_OPEN = 1;
-
-const MYQ_DOOR_STATE_CLOSED = 2;
-
+const MYQ_DOOR_STATE_UKNOWN  =-1;
+const MYQ_DOOR_STATE_OPEN    = 1;
+const MYQ_DOOR_STATE_CLOSED  = 2;
 const MYQ_DOOR_STATE_OPENING = 4;
-
 const MYQ_DOOR_STATE_CLOSING = 5;
+
+
+const MYQ_LAMP_ACTION_CLOSE  = 0;
+const MYQ_LAMP_ACTION_OPEN   = 1;
+
+const MYQ_LAMP_STATE_UKNOWN  =-1;
+const MYQ_LAMP_STATE_OFF     = 0;
+const MYQ_LAMP_STATE_ON      = 1;
 
 
 class MyQException extends Exception {}
@@ -30,12 +31,18 @@ class MyQState {
 
     protected $_stateTime = 0;
 
-    protected $_stateDescriptions = array (
-        MYQ_DOOR_STATE_UNKNOWN => 'unknown',
+    protected $_door_stateDescription = array (
+        MYQ_DOOR_STATE_UKNOWN => 'unknown',
         MYQ_DOOR_STATE_OPEN => 'open',
         MYQ_DOOR_STATE_CLOSED => 'closed',
         MYQ_DOOR_STATE_OPENING => 'opening',
         MYQ_DOOR_STATE_CLOSING => 'closing',
+    );
+
+    protected $_lamp_stateDescription = array (
+		MYQ_LAMP_STATE_UKNOWN => 'unknown',
+		MYQ_LAMP_STATE_OFF => 'off',
+		MYQ_LAMP_STATE_ON => 'on',
     );
 
     public function __construct ($state=false, $timestamp=false) {
@@ -44,7 +51,7 @@ class MyQState {
         }
         $this->_stateTime = time();
         if ($timestamp) {
-            $this->_stateTime = (int)$timestamp / 1000;            
+            $this->_stateTime = (int)$timestamp / 1000;
         }
         return $this;
     }
@@ -52,7 +59,7 @@ class MyQState {
     public function __get ($attr) {
         switch ($attr) {
             case 'desc':
-                return $this->_stateDescriptions[$this->_state];
+                return $this->_door_stateDescription[$this->_state];
             case 'time':
             case 'updated':
             case 'date':
@@ -72,7 +79,7 @@ class MyQState {
     }
 
     public function __toString () {
-        return $this->_stateDescriptions[$this->_state];
+        return $this->_door_stateDescription[$this->_state];
     }
 
     private function _getTimeDelta($opt=null) {
@@ -126,7 +133,21 @@ class MyQState {
 }
 
 class MyQ {
-    
+
+	static $door_stateDescription = array (
+        MYQ_DOOR_STATE_UKNOWN => 'unknown',
+        MYQ_DOOR_STATE_OPEN => 'open',
+        MYQ_DOOR_STATE_CLOSED => 'closed',
+        MYQ_DOOR_STATE_OPENING => 'opening',
+        MYQ_DOOR_STATE_CLOSING => 'closing',
+    );
+
+    static $lamp_stateDescription = array (
+		MYQ_LAMP_STATE_UKNOWN => 'unknown',
+		MYQ_LAMP_STATE_OFF => 'off',
+		MYQ_LAMP_STATE_ON => 'on',
+    );
+
     /** @var string|null $username contains the username used to authenticate with the MyQ API */
     protected $username = null;
 
@@ -159,6 +180,8 @@ class MyQ {
 
     protected $_doorState = null;
 
+	protected $_myDevices = null;
+
     protected $_baseUrl = 'https://myqexternal.myqdevice.com/api/v4';
 
     protected $_loginUri = '/User/Validate';
@@ -166,6 +189,8 @@ class MyQ {
     protected $_getDeviceDetailUri = '/UserDeviceDetails/Get';
 
     protected $_putDeviceStateUri = '/DeviceAttribute/PutDeviceAttribute';
+
+	protected $_getDeviceStateUri = '/deviceattribute/getdeviceattribute';
 
     /** @var resource|null $_conn is the web connection to the MyQ API */
     protected $_conn = null;
@@ -272,34 +297,69 @@ class MyQ {
         return $this;
     }
 
-    public function open () {
-        return $this->_requestState(MYQ_DOOR_ACTION_OPEN);
+    public function open($MyQDeviceId) {
+        return $this->_requestState($MyQDeviceId,MYQ_DOOR_ACTION_OPEN);
     }
 
-    public function close () {
-        return $this->_requestState(MYQ_DOOR_ACTION_CLOSE);
+    public function close($MyQDeviceId) {
+        return $this->_requestState($MyQDeviceId,MYQ_DOOR_ACTION_CLOSE);
     }
 
-    private function _requestState ($action) {
+    public function on($MyQDeviceId) {
+        return $this->_requestState($MyQDeviceId,MYQ_LAMP_ACTION_OPEN);
+    }
+
+    public function off($MyQDeviceId) {
+        return $this->_requestState($MyQDeviceId,MYQ_LAMP_ACTION_CLOSE);
+    }
+
+    private function _requestState ($MyQDeviceName, $action) {
         // Fetch current device information
         $this->_getDetails();
 
+		// get $MyQDeviceId  associated with MyQDeviceName argument.
+			$MyQDeviceId =  false;
+			foreach($this->_myDevices as $deviceType => $devices) {
+
+				foreach($devices as $deviceID => $thisone) {
+					if($thisone['desc'] == $MyQDeviceName) {
+						$MyQDeviceId = $thisone['MyQDeviceId'];
+						if($deviceType == 'LampModule')
+							$AttributeName = 'desiredlightstate';
+						else
+							$AttributeName = 'desireddoorstate';
+						break;
+					}
+				}
+			}
+
+		if(!$MyQDeviceId) {
+			throw new MyQException("MyQDeviceName: {$MyQDeviceName} not found.");
+		}
+
+		//'MyQDeviceId' => $this->_deviceId,
+		//AttributeName' => 'desireddoorstate',
         curl_setopt($this->_conn, CURLOPT_CUSTOMREQUEST, 'PUT');
         curl_setopt($this->_conn, CURLOPT_URL, $this->_baseUrl . $this->_putDeviceStateUri);
         $payload = array (
-            'AttributeName' => 'desireddoorstate',
+            'AttributeName' => $AttributeName,
             'AttributeValue' => $action,
-            'MyQDeviceId' => $this->_deviceId,
+            'MyQDeviceId' => $MyQDeviceId,
         );
         curl_setopt($this->_conn, CURLOPT_POSTFIELDS, json_encode($payload));
         $output = curl_exec($this->_conn);
         $err = curl_error($this->_conn);
+
+		#$info = curl_getinfo($this->_conn);
+        #print_r($info);
+        #print "\n";
 
         if ($err) {
            throw new MyQException("cURL Error #:" . $err);
         }
 
         $data = json_decode($output);
+
         if ($data == false) {
             throw new MyQException("Error updating device state: $output");
         }
@@ -360,6 +420,8 @@ class MyQ {
     private function _getDetails ($getState = false, $forceUpdate = false) {
         $this->_init();
 
+		$myDevices = array();
+
         // always fetch state info from API. Location data is not expected to have changed
         $cachedLocation = true;
         if ($getState === false && $forceUpdate !== true) {
@@ -376,6 +438,7 @@ class MyQ {
 
         $output = curl_exec($this->_conn);
         $data = json_decode($output);
+
         if ($data == false || !isset($data->Devices)) {
             throw new MyQException("Error fetching device details: $output");
         }
@@ -383,6 +446,13 @@ class MyQ {
         // Find our door device ID
         // (we only look at the first listed device - later we can look for a device by name)
         foreach ($data->Devices as $device) {
+
+			$myDevice = array();
+			$myDevice['DeviceType'] = $device->MyQDeviceTypeName;
+
+			#print_r($device);print "\n";
+			//"AttributeDisplayName|MyQDeviceTypeAttributeId"
+
             if ( $cachedLocation === false && stripos($device->MyQDeviceTypeName, "Gateway") !== false ) {
                 // Find location name
                 foreach ($device->Attributes as $attr) {
@@ -392,26 +462,32 @@ class MyQ {
                 }
                 continue; // we don't want device info on the location
             }
-            
+
             // we should be looking at just our WGDO unit
             $this->_deviceId = $device->MyQDeviceId;
-            
+
             foreach ($device->Attributes as $attr) {
                 switch ($attr->AttributeDisplayName) {
                     case 'desc':
-                        $this->_doorName = $attr->Value;
+                        $myDevice[$attr->AttributeDisplayName] = $attr->Value;
                         break;
                     case 'doorstate':
-                        $this->_doorState = new MyQState($attr->Value, $attr->UpdatedTime);
-                        break;
+						$myDevice['deviceState'] = array('state' => self::$door_stateDescription[$attr->Value], 'timestamp' => $attr->UpdatedTime);
+						break;
+					case 'lightstate':
+						$myDevice['deviceState'] = array('state' => self::$lamp_stateDescription[$attr->Value], 'timestamp' => $attr->UpdatedTime);
+						break;
                     default:
                         continue;
                 }
             }
+			$myDevice['MyQDeviceId'] = $device->MyQDeviceId;
+			$myDevice['rawDevice'] = $device;
+			$myDevices[$device->MyQDeviceTypeName][$device->MyQDeviceId] = $myDevice;
 
-            break; // skip any other devices
         }
 
+		$this->_myDevices = $myDevices;
     }
 
 }
