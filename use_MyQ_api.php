@@ -30,12 +30,18 @@ function report($MyQ,$name=false) {
 	foreach($MyQ->refresh()->_myDevices as $device_type => $atom) {
 		foreach($atom as $id => $thisone) {
 			#print_r($thisone);
+
 			if($device_type == 'GarageDoorOpener')
 				$device_type = str_pad("Garage",8);
 			elseif($device_type == 'LampModule')
 				$device_type = str_pad("Light",8);
 
-			if( ( ($name) && ($name == $thisone['desc']) ) || (!$name) ) {
+			if( (($name) && ($name == $thisone['desc']))
+				||
+				(($name) && ($name == $thisone['MyQDeviceId']))
+				||
+				(!$name)
+			) {
 				$time = round(($thisone['deviceState']['timestamp']) / 1000);
 				$time = gmt_to_local_time(intval($time));
 				$time = date("M d, g:i a",strtotime($time));

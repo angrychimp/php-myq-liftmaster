@@ -297,20 +297,20 @@ class MyQ {
         return $this;
     }
 
-    public function open($MyQDeviceId) {
-        return $this->_requestState($MyQDeviceId,MYQ_DOOR_ACTION_OPEN);
+    public function open($MyQDevice) {
+        return $this->_requestState($MyQDevice,MYQ_DOOR_ACTION_OPEN);
     }
 
-    public function close($MyQDeviceId) {
-        return $this->_requestState($MyQDeviceId,MYQ_DOOR_ACTION_CLOSE);
+    public function close($MyQDevice) {
+        return $this->_requestState($MyQDevice,MYQ_DOOR_ACTION_CLOSE);
     }
 
-    public function on($MyQDeviceId) {
-        return $this->_requestState($MyQDeviceId,MYQ_LAMP_ACTION_OPEN);
+    public function on($MyQDevice) {
+        return $this->_requestState($MyQDevice,MYQ_LAMP_ACTION_OPEN);
     }
 
-    public function off($MyQDeviceId) {
-        return $this->_requestState($MyQDeviceId,MYQ_LAMP_ACTION_CLOSE);
+    public function off($MyQDevice) {
+        return $this->_requestState($MyQDevice,MYQ_LAMP_ACTION_CLOSE);
     }
 
     private function _requestState ($MyQDeviceName, $action) {
