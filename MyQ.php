@@ -322,7 +322,7 @@ class MyQ {
 			foreach($this->_myDevices as $deviceType => $devices) {
 
 				foreach($devices as $deviceID => $thisone) {
-					if($thisone['desc'] == $MyQDeviceName) {
+					if( ($thisone['desc'] == $MyQDeviceName) || ($thisone['MyQDeviceId'] == $MyQDeviceName) ) {
 						$MyQDeviceId = $thisone['MyQDeviceId'];
 						if($deviceType == 'LampModule')
 							$AttributeName = 'desiredlightstate';

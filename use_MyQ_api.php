@@ -2,8 +2,12 @@
 <?php
 function get_help() {
 	global $argv;
-	print "usage: {$argv[0]} <open|close|on|off|status|help> [name='device name']\n";
-	print "\tDefaults to status\n";
+	$program = basename($argv[0]);
+	print "Send commands to MyQ enabled devices on your network.\n";
+	print "usage: {$program} <open|close|on|off|status|help> [name=\"device name\"|id=#]\n";
+	print "\tDefaults to showing the status results.\n\n";
+	print "\tUse open/close for garage door units.\n";
+	print "\tUse on/off for lamp/light modues.\n";
 }
 
 function gmt_to_local_time($date) {
@@ -37,9 +41,9 @@ function report($MyQ,$name=false) {
 				$time = date("M d, g:i a",strtotime($time));
 
 				$myDeviceId = "ID:" . str_pad($thisone['MyQDeviceId'],8);
-				$desc = str_pad("({$thisone['desc']})",16);
+				$desc = str_pad("({$thisone['desc']})",18);
 
-				$deviceState = str_pad(ucfirst($thisone['deviceState']['state']),4);
+				$deviceState = str_pad(ucfirst($thisone['deviceState']['state']),8);
 
 				print "\t{$device_type}  - {$myDeviceId} - {$desc} - {$deviceState} - {$time}\n";
 			}
@@ -73,6 +77,8 @@ foreach($argv as $thisone) {
 
 	if(strstr($thisone,'name=')) {
 		$name = str_replace("name=","",$thisone);
+	} elseif(strstr($thisone,'id=')) {
+		$name = str_replace("id=","",$thisone);
 	} else {
 		if(substr($thisone,0,2) == '--')
 			$thisone = substr($thisone,2);
@@ -85,6 +91,7 @@ foreach($argv as $thisone) {
 			case 'close':
 			case 'on':
 			case 'off':
+			case 'of':
 				$action = $thisone;
 				break;
 			case "h":
@@ -114,35 +121,3 @@ try {
 } catch(Exception $e) {
 	die($e->getMessage() . "\n");
 }
-
-exit;
-
-$MyQ->off($office_light);
-
-sleep(1);
-$RC = report($MyQ);
-
-sleep(1);
-$MyQ->on($office_light);
-
-sleep(1);
-$RC = report($MyQ);
-exit;
-
-// Current state
-echo report();
-
-exit.
-
-// Open the door
-$door->open();
-sleep(2);
-echo $report();
-
-
-// Wait for a few seconds and close the door again
-// (my door takes about 15-20 sec to open)
-sleep(15);
-$door->close = true;
-sleep(10);
-echo $report();
