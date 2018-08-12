@@ -27,6 +27,8 @@ $config_file = "config.ini";
 
 function report($MyQ,$name=false) {
 
+	#print_r($MyQ->refresh());exit;
+
 	foreach($MyQ->refresh()->_myDevices as $device_type => $atom) {
 		foreach($atom as $id => $thisone) {
 			#print_r($thisone);
@@ -35,6 +37,8 @@ function report($MyQ,$name=false) {
 				$device_type = str_pad("Garage",8);
 			elseif($device_type == 'LampModule')
 				$device_type = str_pad("Light",8);
+			else
+				$device_type = str_pad($device_type,8);
 
 			if( (($name) && ($name == $thisone['desc']))
 				||

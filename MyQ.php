@@ -294,6 +294,7 @@ class MyQ {
 
     public function refresh () {
         $this->_getDetails();
+        #$MyQ->refresh()
         return $this;
     }
 
@@ -453,7 +454,7 @@ class MyQ {
 			#print_r($device);print "\n";
 			//"AttributeDisplayName|MyQDeviceTypeAttributeId"
 
-            if ( $cachedLocation === false && stripos($device->MyQDeviceTypeName, "Gateway") !== false ) {
+            if ( $cachedLocation === false && stripos($device->MyQDeviceTypeName, "xGateway") !== false ) {
                 // Find location name
                 foreach ($device->Attributes as $attr) {
                     if ($attr->AttributeDisplayName == 'desc') {
@@ -466,6 +467,8 @@ class MyQ {
             // we should be looking at just our WGDO unit
             $this->_deviceId = $device->MyQDeviceId;
 
+			#print_r($device->Attributes);print "\n";
+
             foreach ($device->Attributes as $attr) {
                 switch ($attr->AttributeDisplayName) {
                     case 'desc':
@@ -477,6 +480,9 @@ class MyQ {
 					case 'lightstate':
 						$myDevice['deviceState'] = array('state' => self::$lamp_stateDescription[$attr->Value], 'timestamp' => $attr->UpdatedTime);
 						break;
+					case 'learnmodestate':
+						$myDevice['deviceState'] = array('state' => 'onLine', 'timestamp' => $attr->UpdatedTime);
+						break;
                     default:
                         continue;
                 }
@@ -487,7 +493,12 @@ class MyQ {
 
         }
 
-		$this->_myDevices = $myDevices;
+		# order $myDevices.. gateway, garage, ligt
+			$tmpDevices['Gateway'] = $myDevices['Gateway'];
+			$tmpDevices['GarageDoorOpener'] = $myDevices['GarageDoorOpener'];
+			$tmpDevices['LampModule'] = $myDevices['LampModule'];
+
+		$this->_myDevices = $tmpDevices;
     }
 
 }
